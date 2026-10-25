@@ -42,7 +42,11 @@ Full method and numbers are in [BENCHMARK.md](BENCHMARK.md), and `bench/run.sh` 
 go install github.com/protonnegativo/raijin-secrets/cmd/raijin-secrets@latest
 ```
 
-You also need `trufflehog` on `PATH`, or pass `--trufflehog <path>`. `git` is needed for the context lines of git results.
+This installs the latest release. You also need `trufflehog` on `PATH`, or pass `--trufflehog <path>`. `git` is needed for the context lines of git results.
+
+### Versions
+
+Releases are tagged automatically on every change and every passing engine update. `raijin-secrets --version` shows the release and the tested engine version, e.g. `raijin-secrets v0.1.0 (tested with trufflehog 3.99.7)`. `raijin-mcp update` updates every Raijin tool at once.
 
 ## Usage
 
@@ -187,7 +191,7 @@ The Raijin banner is **off by default**, so normal runs stay small. `--banner` p
 
 ## Engine versions
 
-The trufflehog version Raijin is tested with is in `engines.json` (built into the binary). Before a scan, raijin-secrets runs `trufflehog --version`; when the installed major version differs or it is older than the tested one, it adds an `engine_version` entry to `errors`. When trufflehog's output lines lack the fields Raijin reads, it adds `engine_format` and counts them in `omitted.unparsed`. Neither changes the exit code. A weekly GitHub Actions job runs the benchmark with the latest trufflehog and opens a PR to bump `engines.json` when it passes, or an issue when it breaks.
+The trufflehog version Raijin is tested with is in `engines.json` (built into the binary). Before a scan, raijin-secrets runs `trufflehog --version`; when the installed major version differs or it is older than the tested one, it adds an `engine_version` entry to `errors`. When trufflehog's output lines lack the fields Raijin reads, it adds `engine_format` and counts them in `omitted.unparsed`. Neither changes the exit code. A weekly GitHub Actions job runs the benchmark with the latest trufflehog and commits the bump to `engines.json` and tags a release when it passes, or an issue when it breaks.
 
 ## Development
 

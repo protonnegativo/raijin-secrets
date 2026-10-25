@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: which part of the version to bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # A push that only touches fixtures, docs or workflows does not change the binary, so it is skipped.
+      - name: Tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUMP: ${{ inputs.bump || 'patch' }}
+          BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
+        run: |
+          [ "$BASE" = 0000000000000000000000000000000000000000 ] && BASE=""
+          .github/release.sh "$BUMP" $BASE
