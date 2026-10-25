@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"strings"
 
+	raijinsecrets "github.com/protonnegativo/raijin-secrets"
 	"github.com/protonnegativo/raijin-secrets/internal/banner"
 	"github.com/protonnegativo/raijin-secrets/internal/reduce"
 	"github.com/protonnegativo/raijin-secrets/internal/schema"
@@ -96,6 +97,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	var results []trufflehog.Result
+	var stats trufflehog.Stats
 	verification := ""
 	if len(inputs) > 0 {
 		for _, in := range inputs {
@@ -104,11 +106,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 				fmt.Fprintln(stderr, "raijin-secrets:", err)
 				return 1
 			}
-			r, err := trufflehog.Parse(bytes.NewReader(b))
+			r, st, err := trufflehog.ParseStats(bytes.NewReader(b))
 			if err != nil {
 				fmt.Fprintln(stderr, "raijin-secrets:", err)
 				return 1
 			}
+			stats.Lines += st.Lines
+			stats.Bad += st.Bad
 			results = append(results, r...)
 		}
 		res.Target = strings.Join(inputs, ", ")
@@ -155,7 +159,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
-		topt := trufflehog.Options{Binary: *bin, Verify: *verify, Extra: fs.Args(), Raw: raw}
+		if e, ok := engines()["trufflehog"]; ok {
+			if hint := trufflehog.VersionHint(trufflehog.Version(*bin), e); hint != "" {
+				res.Errors = append(res.Errors, schema.Error{Kind: "engine_version", Hint: hint})
+			}
+		}
+		topt := trufflehog.Options{Binary: *bin, Verify: *verify, Extra: fs.Args(), Raw: raw, Stats: &stats}
 		scans := []func() ([]trufflehog.Result, string, error){}
 		if len(inPaths) > 0 {
 			scans = append(scans, func() ([]trufflehog.Result, string, error) { return trufflehog.Filesystem(ctx, inPaths, topt) })
@@ -187,6 +196,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if *verify {
 			verification = "verification on"
 		}
+	}
+
+	if stats.Bad > 0 {
+		src := res.Raw
+		if src == "" {
+			src = strings.Join(inputs, ", ")
+		}
+		res.Errors = append(res.Errors, schema.Error{Kind: "engine_format", Hint: fmt.Sprintf("%d of %d trufflehog results had no DetectorName, SourceMetadata.Data and Raw or RawV2, or were not JSON; the engine's output format may have changed. Read %s for the full output", stats.Bad, stats.Lines, src)})
+		res.Omitted["unparsed"] += stats.Bad
 	}
 
 	findings, groups, omitted, allLocations := reduce.Reduce(results, opt)
@@ -223,6 +241,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	write(stdout, &res, *format, *pretty)
 	return 0
+}
+
+// engines are the tested engine versions from engines.json.
+func engines() map[string]trufflehog.Engine {
+	m, _ := trufflehog.Engines(raijinsecrets.EnginesJSON)
+	return m
 }
 
 // useColor is true when w is a terminal and NO_COLOR is not set.

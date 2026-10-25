@@ -1,0 +1,3 @@
+{
+  "trufflehog": {"version": "3.99.3", "go": "github.com/trufflesecurity/trufflehog/v3", "release": "trufflesecurity/trufflehog"}
+}

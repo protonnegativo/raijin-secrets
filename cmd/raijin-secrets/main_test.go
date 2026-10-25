@@ -117,7 +117,7 @@ func fakeEngine(t *testing.T) (bin, argsFile string) {
 	argsFile = filepath.Join(dir, "args")
 	abs, _ := filepath.Abs(sample)
 	bin = filepath.Join(dir, "trufflehog")
-	script := "#!/bin/sh\necho \"$@\" >> " + argsFile + "\necho '{\"level\":\"info-0\"}' >&2\ncat " + abs + "\n"
+	script := "#!/bin/sh\n[ \"$1\" = --version ] && echo 'trufflehog 3.99.3' && exit 0\necho \"$@\" >> " + argsFile + "\necho '{\"level\":\"info-0\"}' >&2\ncat " + abs + "\n"
 	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -204,5 +204,28 @@ func TestMaxBytesPointsToTheInput(t *testing.T) {
 	run([]string{"--max-bytes", "900", "--scope", sampleScope(t), "--input", sample}, &out, &errb)
 	if out.Len() > 901 || !strings.Contains(out.String(), `"truncated":true`) || !strings.Contains(out.String(), "read "+sample) {
 		t.Errorf("budget: %d bytes: %s", out.Len(), out.String())
+	}
+}
+
+func TestEngineVersionAndFormatWarnings(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "trufflehog")
+	renamed := `{"SourceMetadata":{"Data":{"Filesystem":{"file":"app/a.env","line":1}}},"Detector":"AWS","Raw":"AKIAFAKE"}`
+	script := "#!/bin/sh\n[ \"$1\" = --version ] && echo 'trufflehog 2.1.0' && exit 0\necho '" + renamed + "'\n"
+	os.WriteFile(bin, []byte(script), 0o700)
+	var out, errb bytes.Buffer
+	code := run([]string{"--trufflehog", bin, "--scope", sampleScope(t), "--raw", filepath.Join(dir, "raw"), "-p", "app"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	var o output
+	json.Unmarshal(out.Bytes(), &o)
+	kinds := map[string]string{}
+	for _, e := range o.Errors {
+		kinds[e.Kind] = e.Hint
+	}
+	if !strings.HasPrefix(kinds["engine_version"], "trufflehog 2.1.0 is not the tested") ||
+		!strings.HasPrefix(kinds["engine_format"], "1 of 1 trufflehog results") || o.Omitted["unparsed"] != 1 {
+		t.Errorf("warnings: %s", out.String())
 	}
 }

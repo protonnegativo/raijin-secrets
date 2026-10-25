@@ -185,6 +185,10 @@ The Raijin banner is **off by default**, so normal runs stay small. `--banner` p
 | `--trufflehog` | trufflehog | path to the binary |
 | `--banner` | false | print the banner to stderr |
 
+## Engine versions
+
+The trufflehog version Raijin is tested with is in `engines.json` (built into the binary). Before a scan, raijin-secrets runs `trufflehog --version`; when the installed major version differs or it is older than the tested one, it adds an `engine_version` entry to `errors`. When trufflehog's output lines lack the fields Raijin reads, it adds `engine_format` and counts them in `omitted.unparsed`. Neither changes the exit code. A weekly GitHub Actions job runs the benchmark with the latest trufflehog and opens a PR to bump `engines.json` when it passes, or an issue when it breaks.
+
 ## Development
 
 ```bash

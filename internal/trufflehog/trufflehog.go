@@ -72,6 +72,8 @@ type Options struct {
 	Extra  []string
 	// Raw, if set, receives trufflehog's JSON output unchanged.
 	Raw io.Writer
+	// Stats, if set, adds up the output lines of every scan.
+	Stats *Stats
 }
 
 // Filesystem scans local paths.
@@ -122,7 +124,11 @@ func run(ctx context.Context, args []string, opt Options) ([]Result, string, err
 	if err := cmd.Start(); err != nil {
 		return nil, "", err
 	}
-	results, parseErr := Parse(r)
+	results, st, parseErr := ParseStats(r)
+	if opt.Stats != nil {
+		opt.Stats.Lines += st.Lines
+		opt.Stats.Bad += st.Bad
+	}
 	waitErr := cmd.Wait()
 	if parseErr != nil {
 		return results, tail(stderr.String(), 3), parseErr
@@ -147,21 +153,46 @@ type line struct {
 	RawV2             string
 	ExtraData         map[string]any
 	SecretParts       map[string]any
+	Level             string // set on log lines
 }
 
-// Parse reads trufflehog JSON output, one result per line. Lines that are not results (log lines, the
-// other engines' output) are skipped.
+// Stats counts the output lines Parse read: Lines results or would-be results, Bad of them without the
+// fields Raijin needs (DetectorName, SourceMetadata.Data and Raw or RawV2), or not JSON at all. A Bad
+// line that grows means trufflehog's output format may have changed.
+type Stats struct {
+	Lines, Bad int
+}
+
+// Parse reads trufflehog JSON output, one result per line. Log lines are skipped; lines that are not
+// results are skipped too, and counted in Stats by ParseStats.
 func Parse(r io.Reader) ([]Result, error) {
+	results, _, err := ParseStats(r)
+	return results, err
+}
+
+// ParseStats is Parse, and also counts the lines that were not results.
+func ParseStats(r io.Reader) ([]Result, Stats, error) {
 	var results []Result
+	var st Stats
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for sc.Scan() {
 		b := bytes.TrimSpace(sc.Bytes())
-		if len(b) == 0 || b[0] != '{' {
+		if len(b) == 0 {
 			continue
 		}
 		var l line
-		if err := json.Unmarshal(b, &l); err != nil || l.DetectorName == "" || (l.Raw == "" && l.RawV2 == "") {
+		if b[0] != '{' || json.Unmarshal(b, &l) != nil {
+			st.Lines++
+			st.Bad++
+			continue
+		}
+		if l.DetectorName == "" && l.Level != "" {
+			continue // a log line
+		}
+		st.Lines++
+		if l.DetectorName == "" || (l.Raw == "" && l.RawV2 == "") || len(l.SourceMetadata.Data) == 0 {
+			st.Bad++
 			continue
 		}
 		res := Result{
@@ -184,7 +215,7 @@ func Parse(r io.Reader) ([]Result, error) {
 		}
 		results = append(results, res)
 	}
-	return results, sc.Err()
+	return results, st, sc.Err()
 }
 
 func str(v any) string {
