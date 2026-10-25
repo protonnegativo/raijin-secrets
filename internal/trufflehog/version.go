@@ -76,6 +76,6 @@ func VersionHint(output string, e Engine) string {
 		return ""
 	}
 	return fmt.Sprintf("trufflehog %d.%d.%d is not the tested %s; results may be incomplete. Install the tested version: "+
-		"curl -sSfL https://raw.githubusercontent.com/%s/main/scripts/install.sh | sh -s -- -b /usr/local/bin v%s",
+		"curl -sSfL https://raw.githubusercontent.com/%s/main/scripts/install.sh | sh -s -- -b /usr/local/bin v%s, or run raijin-mcp update",
 		installed[0], installed[1], installed[2], e.Version, e.Release, e.Version)
 }

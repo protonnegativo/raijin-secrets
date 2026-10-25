@@ -12,6 +12,8 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"regexp"
+	"runtime/debug"
 	"strings"
 
 	raijinsecrets "github.com/protonnegativo/raijin-secrets"
@@ -23,7 +25,53 @@ import (
 	"github.com/protonnegativo/raijin-secrets/internal/trufflehog"
 )
 
-const version = "0.1.0"
+// version is the release this binary was built from, read once from the build info.
+var version = buildVersion(debug.ReadBuildInfo())
+
+// buildVersion is the module version when the binary was installed with go install ...@vX.Y.Z or
+// @latest, and otherwise "dev" with the VCS revision (12 chars) and +dirty for a local go build. Go
+// 1.24 stamps local builds with a pseudo-version (v0.0.0-<time>-<rev>[+dirty]), which is not a release.
+func buildVersion(bi *debug.BuildInfo, ok bool) string {
+	if !ok || bi == nil {
+		return "dev"
+	}
+	if v := bi.Main.Version; v != "" && v != "(devel)" && !strings.Contains(v, "+dirty") && !pseudoRe.MatchString(v) {
+		return v
+	}
+	v := "dev"
+	var rev string
+	var dirty bool
+	for _, s := range bi.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			rev = s.Value
+		case "vcs.modified":
+			dirty = s.Value == "true"
+		}
+	}
+	if rev != "" {
+		if len(rev) > 12 {
+			rev = rev[:12]
+		}
+		v += "-" + rev
+	}
+	if dirty {
+		v += "+dirty"
+	}
+	return v
+}
+
+// pseudoRe matches the time-revision suffix of a Go pseudo-version.
+var pseudoRe = regexp.MustCompile(`\d{14}-[0-9a-f]{12}$`)
+
+// versionLine is what --version prints: the release and the tested engine version.
+func versionLine() string {
+	line := "raijin-secrets " + version
+	if e, ok := engines()["trufflehog"]; ok && e.Version != "" {
+		line += " (tested with trufflehog " + e.Version + ")"
+	}
+	return line
+}
 
 type multi []string
 
@@ -65,7 +113,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		banner.Write(stderr, "raijin-secrets", version, useColor(stderr))
 	}
 	if *showVersion {
-		fmt.Fprintln(stdout, "raijin-secrets", version)
+		fmt.Fprintln(stdout, versionLine())
 		return 0
 	}
 	if *scopeFile == "" {
@@ -176,7 +224,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			r, stderrTail, err := scan()
 			switch {
 			case errors.Is(err, trufflehog.ErrNotFound):
-				res.Errors = append(res.Errors, schema.Error{Kind: "missing_engine", Hint: "install trufflehog (https://github.com/trufflesecurity/trufflehog#floppy_disk-installation) or pass --trufflehog <path>"})
+				res.Errors = append(res.Errors, schema.Error{Kind: "missing_engine", Hint: "install trufflehog (https://github.com/trufflesecurity/trufflehog#floppy_disk-installation) or pass --trufflehog <path>, or run raijin-mcp update"})
 				res.Summary = "trufflehog not found, nothing scanned"
 				res.Raw = ""
 				raw.Close()

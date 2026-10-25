@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime/debug"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -58,7 +60,7 @@ func TestBannerGoesToStderrOnly(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	if !strings.Contains(errb.String(), "TGT-LOCK") || !strings.Contains(errb.String(), "raijin-secrets v"+version) {
+	if !strings.Contains(errb.String(), "TGT-LOCK") || !strings.Contains(errb.String(), "raijin-secrets v"+strings.TrimPrefix(version, "v")) {
 		t.Errorf("banner missing or without the version: %q", errb.String())
 	}
 	if strings.Contains(out.String(), "TGT-LOCK") {
@@ -117,7 +119,7 @@ func fakeEngine(t *testing.T) (bin, argsFile string) {
 	argsFile = filepath.Join(dir, "args")
 	abs, _ := filepath.Abs(sample)
 	bin = filepath.Join(dir, "trufflehog")
-	script := "#!/bin/sh\n[ \"$1\" = --version ] && echo 'trufflehog 3.99.3' && exit 0\necho \"$@\" >> " + argsFile + "\necho '{\"level\":\"info-0\"}' >&2\ncat " + abs + "\n"
+	script := "#!/bin/sh\n[ \"$1\" = --version ] && echo 'trufflehog " + engines()["trufflehog"].Version + "' && exit 0\necho \"$@\" >> " + argsFile + "\necho '{\"level\":\"info-0\"}' >&2\ncat " + abs + "\n"
 	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +213,8 @@ func TestEngineVersionAndFormatWarnings(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "trufflehog")
 	renamed := `{"SourceMetadata":{"Data":{"Filesystem":{"file":"app/a.env","line":1}}},"Detector":"AWS","Raw":"AKIAFAKE"}`
-	script := "#!/bin/sh\n[ \"$1\" = --version ] && echo 'trufflehog 2.1.0' && exit 0\necho '" + renamed + "'\n"
+	old := untestedVersion(t)
+	script := "#!/bin/sh\n[ \"$1\" = --version ] && echo 'trufflehog " + old + "' && exit 0\necho '" + renamed + "'\n"
 	os.WriteFile(bin, []byte(script), 0o700)
 	var out, errb bytes.Buffer
 	code := run([]string{"--trufflehog", bin, "--scope", sampleScope(t), "--raw", filepath.Join(dir, "raw"), "-p", "app"}, &out, &errb)
@@ -224,8 +227,49 @@ func TestEngineVersionAndFormatWarnings(t *testing.T) {
 	for _, e := range o.Errors {
 		kinds[e.Kind] = e.Hint
 	}
-	if !strings.HasPrefix(kinds["engine_version"], "trufflehog 2.1.0 is not the tested") ||
+	if !strings.HasPrefix(kinds["engine_version"], "trufflehog "+old+" is not the tested") ||
 		!strings.HasPrefix(kinds["engine_format"], "1 of 1 trufflehog results") || o.Omitted["unparsed"] != 1 {
 		t.Errorf("warnings: %s", out.String())
+	}
+}
+
+// untestedVersion is one major above the tested trufflehog, which always warns.
+func untestedVersion(t *testing.T) string {
+	t.Helper()
+	major, err := strconv.Atoi(strings.SplitN(engines()["trufflehog"].Version, ".", 2)[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strconv.Itoa(major+1) + ".0.0"
+}
+
+func TestBuildVersion(t *testing.T) {
+	cases := []struct {
+		bi   *debug.BuildInfo
+		want string
+	}{
+		{&debug.BuildInfo{Main: debug.Module{Version: "v0.1.3"}}, "v0.1.3"},
+		{&debug.BuildInfo{Main: debug.Module{Version: "(devel)"}, Settings: []debug.BuildSetting{
+			{Key: "vcs.revision", Value: "0123456789abcdef0123"}, {Key: "vcs.modified", Value: "true"}}}, "dev-0123456789ab+dirty"},
+		{&debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, "dev"},
+		{&debug.BuildInfo{Main: debug.Module{Version: "v0.0.0-20261025172035-630e347fc7cf+dirty"}, Settings: []debug.BuildSetting{
+			{Key: "vcs.revision", Value: "630e347fc7cf00"}}}, "dev-630e347fc7cf"},
+		{nil, "dev"},
+	}
+	for _, c := range cases {
+		if got := buildVersion(c.bi, c.bi != nil); got != c.want {
+			t.Errorf("buildVersion(%+v) = %q, want %q", c.bi, got, c.want)
+		}
+	}
+}
+
+func TestVersionLine(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := run([]string{"--version"}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	want := "raijin-secrets " + version + " (tested with trufflehog " + engines()["trufflehog"].Version + ")\n"
+	if out.String() != want {
+		t.Errorf("--version = %q, want %q", out.String(), want)
 	}
 }
