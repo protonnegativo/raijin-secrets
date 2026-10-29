@@ -10,7 +10,7 @@
 //
 // A file:// repository is also matched by the path rules: file:///srv/app is the path /srv/app.
 // Blank lines and lines starting with # are ignored.
-package scope
+package sources
 
 import (
 	"bufio"

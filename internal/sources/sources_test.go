@@ -1,4 +1,4 @@
-package scope
+package sources
 
 import (
 	"path/filepath"

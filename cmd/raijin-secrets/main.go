@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,12 +15,14 @@ import (
 	"runtime/debug"
 	"strings"
 
+	coreschema "github.com/protonnegativo/raijin-core/schema"
+	"github.com/protonnegativo/raijin-core/scope"
+	"github.com/protonnegativo/raijin-core/state"
 	raijinsecrets "github.com/protonnegativo/raijin-secrets"
 	"github.com/protonnegativo/raijin-secrets/internal/banner"
 	"github.com/protonnegativo/raijin-secrets/internal/reduce"
 	"github.com/protonnegativo/raijin-secrets/internal/schema"
-	"github.com/protonnegativo/raijin-secrets/internal/scope"
-	"github.com/protonnegativo/raijin-secrets/internal/state"
+	"github.com/protonnegativo/raijin-secrets/internal/sources"
 	"github.com/protonnegativo/raijin-secrets/internal/trufflehog"
 )
 
@@ -120,12 +121,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "raijin-secrets: --scope is required")
 		return 1
 	}
-	sc, err := scope.Load(*scopeFile)
-	if err != nil {
-		fmt.Fprintln(stderr, "raijin-secrets: scope:", err)
-		return 1
-	}
-
 	res := schema.Result{
 		Tool:     "raijin-secrets",
 		Version:  version,
@@ -135,6 +130,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		Errors:   []schema.Error{},
 		Next:     []string{},
 		Budget:   schema.Budget{MaxItems: *maxItems, MaxBytes: *maxBytes},
+	}
+	sc, err := sources.Load(*scopeFile)
+	if err != nil {
+		// An invalid scope is never a warning: nothing runs, and the errors say what to write instead.
+		res.Errors = append(res.Errors, scope.SchemaErrors(err)...)
+		res.Summary = "invalid scope file, nothing scanned"
+		write(stdout, &res, *format, *pretty)
+		return 1
 	}
 	opt := reduce.Defaults()
 	opt.MaxItems = *maxItems
@@ -267,7 +270,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			res.Errors = append(res.Errors, schema.Error{Kind: "state_error", Hint: err.Error()})
 		} else {
-			newCount = st.Mark(res.Findings, allLocations)
+			newCount = state.Mark(st, res.Findings, allLocations,
+				func(f *schema.Finding) string { return f.Fingerprint },
+				func(f *schema.Finding) { f.New = true })
 			if err := st.Save(*statePath); err != nil {
 				res.Errors = append(res.Errors, schema.Error{Kind: "state_error", Hint: err.Error()})
 			}
@@ -312,7 +317,7 @@ func useColor(w io.Writer) bool {
 
 // filter keeps the targets the scope allows. A git repository given as a local path becomes a file://
 // URL, which is what trufflehog git takes.
-func filter(targets []string, git bool, sc *scope.Scope, omitted map[string]int) []string {
+func filter(targets []string, git bool, sc *sources.Scope, omitted map[string]int) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, t := range targets {
@@ -321,7 +326,7 @@ func filter(targets []string, git bool, sc *scope.Scope, omitted map[string]int)
 			continue
 		}
 		if git && !strings.Contains(t, "://") {
-			t = "file://" + scope.Path(t)
+			t = "file://" + sources.Path(t)
 		}
 		if seen[t] {
 			continue
@@ -412,12 +417,7 @@ func write(w io.Writer, res *schema.Result, format string, pretty bool) {
 		}
 		return
 	}
-	enc := json.NewEncoder(w)
-	enc.SetEscapeHTML(false)
-	if pretty {
-		enc.SetIndent("", "  ")
-	}
-	_ = enc.Encode(res)
+	_ = coreschema.Write(w, res, pretty)
 }
 
 func readLines(path string) ([]string, error) {
