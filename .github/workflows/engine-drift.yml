@@ -62,7 +62,7 @@ jobs:
           if grep -l '"engine_format"' "$RUNNER_TEMP"/bench/*/*.json >> "$RUNNER_TEMP/verify.txt"; then code=1; fi
           if grep -qE ' [1-9][0-9]* missing from output|MISSING' "$RUNNER_TEMP/verify.txt"; then code=1; fi
           exit $code
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: bench-trufflehog-${{ steps.versions.outputs.installed }}
