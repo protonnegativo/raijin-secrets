@@ -188,6 +188,46 @@ func TestMissingEngine(t *testing.T) {
 	}
 }
 
+func TestInvalidScopeIsStructuredAndNothingRuns(t *testing.T) {
+	// The engine path does not exist: if the tool tried to run it, the result would have missing_engine.
+	rules := "/srv/app\nhttps://github.com*\nhttps://gitlab.com/acme/../evil/*\n!\n"
+	var out, errb bytes.Buffer
+	code := run([]string{"--trufflehog", filepath.Join(t.TempDir(), "nope"), "--scope", scopeFile(t, rules), "-p", "/srv/app"}, &out, &errb)
+	if code != 2 {
+		t.Fatalf("an invalid scope must exit 2, got %d", code)
+	}
+	if !strings.HasPrefix(out.String(), `{"schema_version":1,"tool":"raijin-secrets"`) {
+		t.Errorf("stdout is not a result: %s", out.String())
+	}
+	var o output
+	if err := json.Unmarshal(out.Bytes(), &o); err != nil {
+		t.Fatalf("stdout is not JSON: %v", err)
+	}
+	if len(o.Errors) != 3 || len(o.Findings) != 0 || o.Raw != "" || !strings.HasPrefix(o.Summary, "invalid scope file") {
+		t.Fatalf("want 3 scope errors and nothing scanned: %s", out.String())
+	}
+	for i, line := range []string{"line 2:", "line 3:", "line 4:"} {
+		if o.Errors[i].Kind != "scope" || !strings.HasPrefix(o.Errors[i].Hint, line) {
+			t.Errorf("error %d = %+v, want kind scope, hint starting %q", i, o.Errors[i], line)
+		}
+	}
+
+	out.Reset()
+	if code := run([]string{"--scope", filepath.Join(t.TempDir(), "missing.txt"), "-p", "app"}, &out, &errb); code != 2 || !strings.Contains(out.String(), `"kind":"scope","hint":"cannot read the scope file`) {
+		t.Errorf("unreadable scope file: exit %d, %s", code, out.String())
+	}
+}
+
+func TestResultStartsWithSchemaVersion(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := run([]string{"--scope", sampleScope(t), "--input", sample}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	if !strings.HasPrefix(out.String(), `{"schema_version":1,"tool":"raijin-secrets",`) {
+		t.Errorf("schema_version must be the first field: %.80s", out.String())
+	}
+}
+
 func TestUsageErrors(t *testing.T) {
 	var out, errb bytes.Buffer
 	if code := run([]string{"-p", "app"}, &out, &errb); code != 1 {
@@ -260,6 +300,21 @@ func TestBuildVersion(t *testing.T) {
 		if got := buildVersion(c.bi, c.bi != nil); got != c.want {
 			t.Errorf("buildVersion(%+v) = %q, want %q", c.bi, got, c.want)
 		}
+	}
+}
+
+func TestReleaseVersionWins(t *testing.T) {
+	defer func(old string) { releaseVersion = old }(releaseVersion)
+	bi := &debug.BuildInfo{Main: debug.Module{Version: "v0.1.3"}}
+	for in, want := range map[string]string{"v9.9.9": "v9.9.9", "9.9.9": "v9.9.9", "": "v0.1.3"} {
+		releaseVersion = in
+		if got := buildVersion(bi, true); got != want {
+			t.Errorf("releaseVersion %q: buildVersion = %q, want %q", in, got, want)
+		}
+	}
+	releaseVersion = "v9.9.9"
+	if got := buildVersion(nil, false); got != "v9.9.9" {
+		t.Errorf("without build info: %q", got)
 	}
 }
 

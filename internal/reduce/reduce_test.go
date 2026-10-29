@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/protonnegativo/raijin-secrets/internal/schema"
-	"github.com/protonnegativo/raijin-secrets/internal/scope"
+	"github.com/protonnegativo/raijin-secrets/internal/sources"
 	"github.com/protonnegativo/raijin-secrets/internal/trufflehog"
 )
 
@@ -26,7 +26,7 @@ func sample(t *testing.T) []trufflehog.Result {
 
 func sampleOpt(t *testing.T) Options {
 	t.Helper()
-	sc, err := scope.Parse([]string{"app", "ci", "docs", "node_modules", "tests", "file:///nonexistent/shop"})
+	sc, err := sources.Parse([]string{"app", "ci", "docs", "node_modules", "tests", "file:///nonexistent/shop"})
 	if err != nil {
 		t.Fatal(err)
 	}
