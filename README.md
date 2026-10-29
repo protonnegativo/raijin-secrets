@@ -1,5 +1,11 @@
 # ⚡ Raijin Secrets
 
+[![CI](https://github.com/protonnegativo/raijin-secrets/actions/workflows/ci.yml/badge.svg)](https://github.com/protonnegativo/raijin-secrets/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/protonnegativo/raijin-secrets)](https://github.com/protonnegativo/raijin-secrets/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/protonnegativo/raijin-secrets)](LICENSE)
+[![Go Reference](https://pkg.go.dev/badge/github.com/protonnegativo/raijin-secrets.svg)](https://pkg.go.dev/github.com/protonnegativo/raijin-secrets)
+[![Go Report Card](https://goreportcard.com/badge/github.com/protonnegativo/raijin-secrets)](https://goreportcard.com/report/github.com/protonnegativo/raijin-secrets)
+
 **trufflehog for AI agents: verified secrets first, with the minimal context line, never the full file.**
 
 `raijin-secrets` is a tool of **Raijin**, an arsenal of offensive security tools built for AI agents. It runs [trufflehog](https://github.com/trufflesecurity/trufflehog) on local paths and git repositories and returns the **Raijin Schema**: one compact JSON where each secret is one entry listing every file, line and commit it was found at, verified secrets are ranked first, the secret value is redacted, the line it was found on is kept as a short redacted context, and secrets that only sit in tests, docs and vendored code are collapsed into groups.
