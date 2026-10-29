@@ -193,8 +193,8 @@ func TestInvalidScopeIsStructuredAndNothingRuns(t *testing.T) {
 	rules := "/srv/app\nhttps://github.com*\nhttps://gitlab.com/acme/../evil/*\n!\n"
 	var out, errb bytes.Buffer
 	code := run([]string{"--trufflehog", filepath.Join(t.TempDir(), "nope"), "--scope", scopeFile(t, rules), "-p", "/srv/app"}, &out, &errb)
-	if code == 0 {
-		t.Fatal("an invalid scope must exit non-zero")
+	if code != 2 {
+		t.Fatalf("an invalid scope must exit 2, got %d", code)
 	}
 	if !strings.HasPrefix(out.String(), `{"schema_version":1,"tool":"raijin-secrets"`) {
 		t.Errorf("stdout is not a result: %s", out.String())
@@ -213,7 +213,7 @@ func TestInvalidScopeIsStructuredAndNothingRuns(t *testing.T) {
 	}
 
 	out.Reset()
-	if code := run([]string{"--scope", filepath.Join(t.TempDir(), "missing.txt"), "-p", "app"}, &out, &errb); code == 0 || !strings.Contains(out.String(), `"kind":"scope","hint":"cannot read the scope file`) {
+	if code := run([]string{"--scope", filepath.Join(t.TempDir(), "missing.txt"), "-p", "app"}, &out, &errb); code != 2 || !strings.Contains(out.String(), `"kind":"scope","hint":"cannot read the scope file`) {
 		t.Errorf("unreadable scope file: exit %d, %s", code, out.String())
 	}
 }

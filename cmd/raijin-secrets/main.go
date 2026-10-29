@@ -150,7 +150,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		res.Errors = append(res.Errors, scope.SchemaErrors(err)...)
 		res.Summary = "invalid scope file, nothing scanned"
 		write(stdout, &res, *format, *pretty)
-		return 1
+		return 2
 	}
 	opt := reduce.Defaults()
 	opt.MaxItems = *maxItems
