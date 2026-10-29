@@ -26,13 +26,26 @@ import (
 	"github.com/protonnegativo/raijin-secrets/internal/trufflehog"
 )
 
+// releaseVersion is set by the release build (goreleaser: -ldflags "-X main.releaseVersion=...").
+// It is a separate variable because -X can only set a string variable that has no initializer, and
+// version below is computed.
+var releaseVersion string
+
 // version is the release this binary was built from, read once from the build info.
 var version = buildVersion(debug.ReadBuildInfo())
 
-// buildVersion is the module version when the binary was installed with go install ...@vX.Y.Z or
-// @latest, and otherwise "dev" with the VCS revision (12 chars) and +dirty for a local go build. Go
-// 1.24 stamps local builds with a pseudo-version (v0.0.0-<time>-<rev>[+dirty]), which is not a release.
+// buildVersion is releaseVersion when the release build set it (with a "v" in front when it has none,
+// since goreleaser's {{ .Version }} has none), the module version when the binary was installed with go
+// install ...@vX.Y.Z or @latest, and otherwise "dev" with the VCS revision (12 chars) and +dirty for a
+// local go build. Go 1.24 stamps local builds with a pseudo-version (v0.0.0-<time>-<rev>[+dirty]), which
+// is not a release.
 func buildVersion(bi *debug.BuildInfo, ok bool) string {
+	if v := strings.TrimSpace(releaseVersion); v != "" {
+		if v[0] >= '0' && v[0] <= '9' {
+			v = "v" + v
+		}
+		return v
+	}
 	if !ok || bi == nil {
 		return "dev"
 	}
