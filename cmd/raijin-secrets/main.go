@@ -117,7 +117,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print the version")
 	showBanner := fs.Bool("banner", false, "print the Raijin banner to stderr (off by default to keep output small)")
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "usage: raijin-secrets --scope scope.txt (-p path | -g repo | -l targets.txt | --input results.jsonl) [flags] [-- extra trufflehog args]\n\n")
+		fmt.Fprintf(stderr, "usage: raijin-secrets --scope scope.txt (-p path | -g repo | -l targets.txt | --input results.jsonl) [flags] [-- extra trufflehog args]\n\nexit codes: 0 ok; 2 structured error (invalid scope, trufflehog missing) with JSON on stdout; 1 wrong usage\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {

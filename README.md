@@ -18,21 +18,21 @@ Here are the same results read by an agent (tokens, `o200k_base`):
 
 ```
 Noisy: a project tree, 413 results, 35 secrets, 31 of them only in tests, docs and vendored code
-  raijin-secrets  █▌                     7,197 tokens
+  raijin-secrets  █▌                     7,206 tokens
   trufflehog text ██████▎               30,232 tokens
   trufflehog JSON ████████████████████  96,543 tokens
 
 Findings: a git history, 28 results, 12 secrets, 11 findings
-  raijin-secrets  ██▋                    1,242 tokens
-  trufflehog text ████████████▋          5,871 tokens
-  trufflehog JSON ████████████████████   9,289 tokens
+  raijin-secrets  ██▋                    1,251 tokens
+  trufflehog text ████████████▋          5,815 tokens
+  trufflehog JSON ████████████████████   9,233 tokens
 
 Verified (synthetic): the same history with 5 secrets marked verified and 1 with a verification error
-  raijin-secrets  ██▉                    1,303 tokens
-  trufflehog JSON ████████████████████   9,194 tokens
+  raijin-secrets  ██▉                    1,312 tokens
+  trufflehog JSON ████████████████████   9,138 tokens
 ```
 
-raijin-secrets reads **7× to 13×** fewer tokens than trufflehog's JSON, and **4.2× to 4.7×** fewer than its text output. Each scenario's bars are drawn to scale against the JSON. The fixtures are local files and a local git repository full of **fake** secrets; trufflehog ran with `--no-verification`, so nothing was sent anywhere. The verified scenario is trufflehog's JSON from the findings run with `Verified` set by the benchmark script, since no fake secret can pass a real verification.
+raijin-secrets reads **7× to 13×** fewer tokens than trufflehog's JSON, and **4.2× to 4.6×** fewer than its text output. Each scenario's bars are drawn to scale against the JSON. The fixtures are local files and a local git repository full of **fake** secrets; trufflehog ran with `--no-verification`, so nothing was sent anywhere. The verified scenario is trufflehog's JSON from the findings run with `Verified` set by the benchmark script, since no fake secret can pass a real verification.
 
 - **Nothing is lost.** Every result trufflehog reported, a detector plus a secret plus a place, is in the output with its verification status. `bench/verify.py` checked all 469 results in the three scenarios and none were missing.
 - **No secret value leaves the raw file.** The output shows `AKIA…(20)#d2def24d`: the first characters, the length and a short hash. `bench/verify.py` also checks that no secret value appears in the output.
@@ -87,8 +87,9 @@ A path rule covers the path and everything under it (a relative one is taken fro
 
 ```json
 {
+  "schema_version": 1,
   "tool": "raijin-secrets",
-  "version": "0.1.0",
+  "version": "v0.1.0",
   "target": "../findings/trufflehog.jsonl",
   "summary": "28 results, 12 secrets, 11 findings (11 medium), 0 verified, 1 groups",
   "findings": [
@@ -166,6 +167,9 @@ What the reducer does:
 
   Every cut is counted in `omitted`, `budget.truncated` is set, and `next` points to the raw file. `--max-items` caps the number of findings (0, the default, keeps all).
 - **Errors** say what to try next. If trufflehog is missing, nothing runs and the exit code is 2.
+- **`schema_version`** is the first field of every result (currently `1`); it names the version of the result format.
+- **Invalid scope:** a scope file that cannot be read or has invalid lines runs nothing and returns `errors` with `kind: "scope"`, one per invalid line (`line N: ...`, with what to write instead).
+- **Exit codes:** `0` ok; `2` a structured error with the JSON on stdout (invalid scope, missing trufflehog), told apart by `kind`; `1` wrong usage (bad flag, `--scope` missing, no target in scope), where the message is on stderr.
 
 Fields an agent can rebuild are left out to save tokens:
 
@@ -206,7 +210,7 @@ go test ./...
 go vet ./...
 ```
 
-Standard library only. trufflehog runs as a subprocess, once with `filesystem --json --no-update --no-verification <paths>` for all paths and once with `git --json --no-update --no-verification <url>` per repository, so the binary stays small and the engine can be updated on its own. The CLI tests run the live path offline with a small fake trufflehog; `testdata/sample.jsonl` is synthetic trufflehog output with fake values that hits every rule, including verified and unknown results.
+The only dependency is [raijin-core](https://github.com/protonnegativo/raijin-core) (the shared schema, scope and state packages); the rest is the standard library. trufflehog runs as a subprocess, once with `filesystem --json --no-update --no-verification <paths>` for all paths and once with `git --json --no-update --no-verification <url>` per repository, so the binary stays small and the engine can be updated on its own. The CLI tests run the live path offline with a small fake trufflehog; `testdata/sample.jsonl` is synthetic trufflehog output with fake values that hits every rule, including verified and unknown results.
 
 ## Responsible use
 

@@ -8,7 +8,7 @@ Reproduce: `bench/run.sh [workdir]` (needs go, git, trufflehog and python3 with 
 
 - **Fixtures:** `bench/gen_fixtures.py` writes them on every run. Every secret is a random string from a fixed seed, shaped like a real key so trufflehog's detectors match it, and the git commits have fixed dates and authors, so the files and the commit hashes are the same on every run. **None of them is a real credential.**
 - **No network.** trufflehog ran with `--no-verification` (no secret is sent to any provider) and `--no-update`. Nothing left the machine.
-- **trufflehog:** v3.99.3. Run on 2026-10-24.
+- **trufflehog:** v3.99.7. Run on 2026-10-29.
 - **raijin-secrets:** replays trufflehog's saved JSON with `--input`, from the fixtures' directory so it reads the context lines, so every row sees the same results. Defaults apply: no limit on findings, and `--max-bytes 32000`, which was not reached. `bench/run.sh` also runs the live path (`-p`, `-g`) once per real scenario and checks it gives the same findings and groups as the replay.
 - **Baselines**, as an agent would read trufflehog:
   - JSON: `trufflehog filesystem|git --json --no-verification`, one line per result.
@@ -23,8 +23,8 @@ A project tree: 40 vendored npm packages that share 4 npm tokens (in `.npmrc` an
 |---|---:|---:|---:|
 | trufflehog `--json` | 324,344 | 96,543 | 1× |
 | trufflehog text | 88,955 | 30,232 | 3.2× |
-| **raijin-secrets JSON (default)** | 23,651 | **7,197** | **13.4×** |
-| raijin-secrets `--pretty` | 29,954 | 8,870 | 10.9× |
+| **raijin-secrets JSON (default)** | 23,681 | **7,206** | **13.4×** |
+| raijin-secrets `--pretty` | 29,988 | 8,882 | 10.9× |
 | raijin-secrets `--format table` | 1,697 | 693 | 139× |
 
 ## Scenario 2: findings (git history)
@@ -33,10 +33,10 @@ A git repository of 9 commits: settings with an AWS key, a Postgres URL and a St
 
 | Output | Bytes | Tokens | vs. trufflehog JSON |
 |---|---:|---:|---:|
-| trufflehog `--json` | 29,458 | 9,289 | 1× |
-| trufflehog text | 15,937 | 5,871 | 1.6× |
-| **raijin-secrets JSON (default)** | 3,685 | **1,242** | **7.5×** |
-| raijin-secrets `--pretty` | 5,151 | 1,689 | 5.5× |
+| trufflehog `--json` | 29,430 | 9,233 | 1× |
+| trufflehog text | 15,909 | 5,815 | 1.6× |
+| **raijin-secrets JSON (default)** | 3,715 | **1,251** | **7.4×** |
+| raijin-secrets `--pretty` | 5,185 | 1,701 | 5.4× |
 | raijin-secrets `--format table` | 1,956 | 708 | 13× |
 
 ## Scenario 3: verified (synthetic)
@@ -45,10 +45,10 @@ A git repository of 9 commits: settings with an AWS key, a Postgres URL and a St
 
 | Output | Bytes | Tokens | vs. trufflehog JSON |
 |---|---:|---:|---:|
-| trufflehog `--json` (edited) | 29,579 | 9,194 | 1× |
-| **raijin-secrets JSON (default)** | 3,965 | **1,303** | **7.1×** |
-| raijin-secrets `--pretty` | 5,524 | 1,782 | 5.2× |
-| raijin-secrets `--format table` | 2,010 | 722 | 13× |
+| trufflehog `--json` (edited) | 29,551 | 9,138 | 1× |
+| **raijin-secrets JSON (default)** | 3,995 | **1,312** | **7.0×** |
+| raijin-secrets `--pretty` | 5,558 | 1,794 | 5.1× |
+| raijin-secrets `--format table` | 2,010 | 722 | 12.7× |
 
 The edited file is re-encoded by Python, which writes `<` where trufflehog writes `<`, so it is 95 tokens shorter than scenario 2's.
 
@@ -69,6 +69,6 @@ What the JSON leaves out stays in `raw`, which raijin-secrets saves to disk with
 ## Reading the numbers
 
 - **Against trufflehog's JSON**, the structured output an agent would parse, raijin-secrets uses **7× to 13× fewer tokens**. Most of the JSON is repeated per result: the detector description, the source name, the repository path, the author, `SecretParts` and the secret itself, often twice (`Raw` and `RawV2`).
-- **Against trufflehog's text output**, raijin-secrets uses **4.2× fewer tokens** on the noisy run (30,232 → 7,197) and **4.7× fewer** on the git history (5,871 → 1,242). The text output is one block per place, so a secret copied 25 times is written 25 times; raijin-secrets writes it once with 25 locations. It also has no ranking, no grouping of test and vendored code, and every secret in clear text.
+- **Against trufflehog's text output**, raijin-secrets uses **4.2× fewer tokens** on the noisy run (30,232 → 7,206) and **4.6× fewer** on the git history (5,815 → 1,251). The text output is one block per place, so a secret copied 25 times is written 25 times; raijin-secrets writes it once with 25 locations. It also has no ranking, no grouping of test and vendored code, and every secret in clear text.
 - **The cost that is left** is the locations: every place a secret was found is listed, because that is what an agent acts on (the file to fix, the commit to rewrite). In the noisy run, the 9 AWS key pairs of the test fixtures list the same 25 files each.
 - **The output stays bounded.** On a run too big for `--max-bytes`, raijin-secrets cuts the least important data first: places of grouped secrets, then groups, then context lines, then extra places of low-ranked findings, then low-ranked findings. Every cut is counted in `omitted`, and `next` points to the raw file. trufflehog's output has no upper bound.
