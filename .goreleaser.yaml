@@ -5,7 +5,7 @@ project_name: raijin-secrets
 
 before:
   hooks:
-    - go mod tidy -diff
+    - go mod tidy
 
 builds:
   - id: raijin-secrets
